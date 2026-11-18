@@ -132,7 +132,10 @@ def generate_order_receipt(order):
         "PAYMENT_REJECTED": "❌ REJECTED"
     }
     status_display = status_map.get(order["status"], f"⏳ {order['status']}")
-    username_display = f"@{order['username']}" if order['username'] else "No username"
+    
+    raw_user = order['username'] or "No username"
+    safe_user = raw_user.replace("_", "\\_").replace("*", "\\*")
+    username_display = f"@{safe_user}" if order['username'] else "No username"
 
     try:
         dt = datetime.fromisoformat(order["created_at"])
@@ -141,20 +144,20 @@ def generate_order_receipt(order):
         formatted_date = order["created_at"]
 
     return (
-        "🧾 **SAL DIAMOND OFFICIAL RECEIPT**\n"
+        "🧾 *SAL DIAMOND OFFICIAL RECEIPT*\n"
         "=============================\n"
-        f"🆔 **ORDER ID :** #{order['id']}\n"
-        f"👤 **CUSTOMER :** {username_display}\n"
-        f"🎮 **GAME :** {order['game_name']}\n"
-        f"📦 **PACKAGE :** {order['package_name']}\n"
-        f"🎯 **PLAYER ID:** {order['player_id']}\n"
-        f"💵 **TOTAL :** ${order['selling_price']:.2f}\n"
+        f"🆔 *ORDER ID :* `#{order['id']}`\n"
+        f"👤 *CUSTOMER :* {username_display}\n"
+        f"🎮 *GAME :* {order['game_name']}\n"
+        f"📦 *PACKAGE :* {order['package_name']}\n"
+        f"🎯 *PLAYER ID:* `{order['player_id']}`\n"
+        f"💵 *TOTAL :* `${order['selling_price']:.2f}`\n"
         "-----------------------------\n"
-        f"📌 **STATUS :** {status_display}\n"
-        f"📅 **DATE :** {formatted_date}\n"
-        "============================-\n"
-        "🙏 **អរគុណច្រើនសម្រាប់ការប្រើប្រាស់សេវាកម្មរបស់យើងខ្ញុំ!**\n"
-        "✨ *Thank you for choosing our service!*"
+        f"📌 *STATUS :* {status_display}\n"
+        f"📅 *DATE :* `{formatted_date}`\n"
+        "=============================\n"
+        "🙏 *អរគុណច្រើនសម្រាប់ការប្រើប្រាស់សេវាកម្មរបស់យើងខ្ញុំ!*\n"
+        "✨ _Thank you for choosing our service!_"
     )
 
 def main_menu():
