@@ -594,7 +594,7 @@ async def my_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         SELECT * FROM orders 
         WHERE telegram_id = ? 
-          AND created_at >= date('now', '-1 week')
+          AND created_at >= datetime('now', '-30 days')
         ORDER BY id DESC
         """, 
         (user_id,)
