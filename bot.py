@@ -658,19 +658,25 @@ async def orders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     conn = db()
+    
+    # 🧹 លុប Order ណាមួយដែលមានអាយុកាលលើសពី ១ ខែ (៣០ថ្ងៃ) ចោលដោយស្វ័យប្រវត្ត
+    conn.execute("DELETE FROM orders WHERE created_at < datetime('now', '-30 days')")
+    conn.commit()
+
+    # ទាញយក Order ដែលនៅសល់ក្នុងរយៈពេល ១ ខែចុងក្រោយមកបង្ហាញ
     orders = conn.execute("""
         SELECT * FROM orders
-        WHERE created_at >= date('now', '-7 days')
+        WHERE created_at >= datetime('now', '-30 days')
         ORDER BY id DESC
         LIMIT 1000
     """).fetchall()
     conn.close()
 
     if not orders:
-        await update.message.reply_text("📋 គ្មាន Order ក្នុងរយៈពេល ១ សប្តាហ៍ចុងក្រោយនេះទេ។")
+        await update.message.reply_text("📋 គ្មាន Order ក្នុងរយៈពេល ១ ខែចុងក្រោយនេះទេ។")
         return
 
-    text = "📋 **ប្រវត្តិ Order ក្នុងរយៈពេល ១ សប្តាហ៍ចុងក្រោយ:**\n\n"
+    text = "📋 **ប្រវត្តិ Order (រក្សាទុកត្រឹម ១ ខែចុងក្រោយ):**\n\n"
 
     status_icons = {
         "COMPLETED": "🎉",
