@@ -267,15 +267,19 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
 import os
 
 # ផ្ញើរូបភាព KHQR ជាមួយ Caption
+# ផ្ញើរូបភាព KHQR ជាមួយ Caption
 if os.path.exists("khqr.png"):
     with open("khqr.png", "rb") as photo_file:
         await query.message.reply_photo(
-            photo=photo_file, 
-            caption=safe_caption(caption_text),
+            photo=photo_file,
+            caption=caption_text,
             parse_mode="Markdown"
         )
 else:
-    await query.message.reply_text(caption_text, parse_mode="Markdown")    return WAITING_PAYMENT
+    await query.message.reply_text(caption_text, parse_mode="Markdown")
+
+# ដាក់ return មកក្រៅ block ខាងលើ ដើម្បីឱ្យវាដំណើរការទោះបីជាចូល if ឬ else ក៏ដោយ
+return WAITING_PAYMENT
 
 async def cancel_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
