@@ -26,7 +26,7 @@ def parse_env_int(var_name, default_val):
         return default_val
 
 GROUP_ID = parse_env_int("GROUP_ID", -1003957662857)
-GROUP_2_ID = parse_env_int("GROUP_2_ID", 0)
+GROUP_2_ID = parse_env_int("-1004475288967", 0)
 
 KHQR_IMAGE = os.getenv("KHQR_IMAGE", "payments/khqr.png")
 LOGO_IMAGE = os.getenv("LOGO_IMAGE", "logo.png")
