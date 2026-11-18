@@ -531,4 +531,164 @@ async def admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         updated_status = status_text_map["COMPLETED"]
         full_text = base_admin_text + f"📌 *ស្ថានភាព:* {updated_status}\n*(ការបញ្ជាទិញបានបញ្ចប់រួចរាល់)*"
-        await query.edit_message_caption(
+        await query.edit_message_caption(caption=safe_caption(full_text), parse_mode="Markdown")
+
+    conn.close()
+
+async def my_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    conn = db()
+    orders = conn.execute(
+        """
+        SELECT * FROM orders 
+        WHERE telegram_id = ? 
+          AND created_at >= date('now', '-1 week')
+        ORDER BY id DESC
+        """, 
+        (user_id,)
+    ).fetchall()
+    conn.close()
+
+    if not orders:
+        msg_text = "🛒 អ្នកមិនទាន់មានប្រវត្តិបញ្ជាទិញក្នុងរយៈពេល ១ សប្តាហ៍ចុងក្រោយនេះទេ។\n(No purchase history in the last week)"
+    else:
+        status_map = {
+            "PAYMENT_REVIEW": "⏳ រង់ចាំការពិនិត្យ",
+            "PAID_VERIFIED": "✅ បង់ប្រាក់រួចរាល់", 
+            "TOPUP_PROCESSING": "🚀 កំពុងដំណើរការ",
+            "COMPLETED": "🎉 រួចរាល់ (Success)",
+            "PAYMENT_REJECTED": "❌ មិនបានជោគជ័យ"
+        }
+        
+        msg_text = "🛒 **ប្រវត្តិបញ្ជាទិញ ១ សប្តាហ៍ចុងក្រោយ (Past Week History)៖**\n\n"
+        for o in orders:
+            status_display = status_map.get(o['status'], o['status'])
+            
+            try:
+                dt = datetime.fromisoformat(o["created_at"])
+                formatted_date = dt.strftime("%d-%m-%Y %I:%M %p")
+            except Exception:
+                formatted_date = o["created_at"]
+
+            msg_text += (
+                f"🔹 **Order ID:** `#{o['id']}`\n"
+                f"🎮 **ហ្គេម:** {o['game_name']}\n"
+                f"📦 **កញ្ចប់:** {o['package_name']}\n"
+                f"💵 **តម្លៃ:** `${o['selling_price']:.2f}`\n"
+                f"📌 **ស្ថានភាព:** {status_display}\n"
+                f"📅 **កាលបរិច្ឆេទ:** `{formatted_date}`\n"
+                "-------------------------------------\n"
+            )
+
+    buttons = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ ត្រឡប់ក្រោយ", callback_data="back")]])
+    
+    if query.message.photo:
+        await query.edit_message_caption(caption=safe_caption(msg_text), reply_markup=buttons, parse_mode="Markdown")
+    else:
+        await query.edit_message_text(text=msg_text, reply_markup=buttons, parse_mode="Markdown")
+
+async def back(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    caption_text = (
+        "🎮 *ស្វាគមន៍មកកាន់ SAL DIAMOND TOP UP!*\n\n"
+        "⚡ រហ័ស • សុវត្ថិភាព • តម្លៃសមរម្យ\n\n"
+        "សូមជ្រើសរើសសេវាកម្មខាងក្រោម៖"
+    )
+    if query.message.photo:
+        await query.edit_message_caption(caption=safe_caption(caption_text), reply_markup=main_menu(), parse_mode="Markdown")
+    else:
+        await query.edit_message_text(text=caption_text, reply_markup=main_menu(), parse_mode="Markdown")
+
+async def orders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        return
+
+    conn = db()
+    orders = conn.execute("""
+        SELECT * FROM orders
+        WHERE created_at >= date('now', '-7 days')
+        ORDER BY id DESC
+        LIMIT 1000
+    """).fetchall()
+    conn.close()
+
+    if not orders:
+        await update.message.reply_text("📋 គ្មាន Order ក្នុងរយៈពេល ១ សប្តាហ៍ចុងក្រោយនេះទេ។")
+        return
+
+    text = "📋 **ប្រវត្តិ Order ក្នុងរយៈពេល ១ សប្តាហ៍ចុងក្រោយ:**\n\n"
+
+    status_icons = {
+        "COMPLETED": "🎉",
+        "PAID_VERIFIED": "✅",
+        "TOPUP_PROCESSING": "🚀",
+        "PAYMENT_REVIEW": "⏳",
+        "PAYMENT_REJECTED": "❌"
+    }
+
+    for order in orders:
+        username = f"@{order['username']}" if order['username'] else "No username"
+        icon = status_icons.get(order['status'], "⌛")
+        price = f"${order['selling_price']:.2f}"
+        text += f"• `#{order['id']}` | {username} | {price} | {icon} {order['status']}\n"
+
+    await update.message.reply_text(
+        text=safe_caption(text, limit=4000), 
+        parse_mode="Markdown"
+    )
+
+def main():
+    if not BOT_TOKEN:
+        raise ValueError("Please configure BOT_TOKEN in .env")
+
+    init_db()
+    app = Application.builder().token(BOT_TOKEN).build()
+
+    payment_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(confirm_order, pattern="^confirm_order$")],
+        states={WAITING_PAYMENT: [MessageHandler(filters.PHOTO, receive_payment)]},
+        fallbacks=[CallbackQueryHandler(cancel_order, pattern="^cancel_order$")],
+        per_message=False,
+    )
+
+    player_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(choose_package, pattern=r"^pkg:")],
+        states={WAITING_PLAYER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_player_id)]},
+        fallbacks=[],
+        per_message=False,
+    )
+
+    support_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_support_contact, pattern="^support_contact$")],
+        states={WAITING_SUPPORT_MSG: [MessageHandler((filters.TEXT & ~filters.COMMAND) | filters.PHOTO | filters.Document.ALL, receive_support_msg)]},
+        fallbacks=[],
+        per_message=False,
+    )
+
+    # Handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("orders", orders_command))
+    app.add_handler(player_conv)
+    app.add_handler(payment_conv)
+    app.add_handler(support_conv)
+    app.add_handler(CallbackQueryHandler(choose_game, pattern=r"^game:"))
+    app.add_handler(CallbackQueryHandler(my_orders, pattern="^my_orders$"))
+    app.add_handler(CallbackQueryHandler(support_menu, pattern="^support_menu$"))
+    app.add_handler(CallbackQueryHandler(support_faq, pattern="^support_faq$"))
+    app.add_handler(CallbackQueryHandler(admin_action, pattern=r"^(verify|reject|start|complete):"))
+    app.add_handler(CallbackQueryHandler(back, pattern="^back$"))
+    app.add_handler(MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, direct_support_handler))
+
+    print("Shop Bot is running...")
+    app.run_polling()
+
+from keep_alive import keep_alive
+
+if __name__ == "__main__":
+    keep_alive()
+    main()
