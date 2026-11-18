@@ -143,15 +143,15 @@ def generate_order_receipt(order):
     return (
         "🧾 **SAL DIAMOND OFFICIAL RECEIPT**\n"
         "=============================\n"
-        f"🆔 **ORDER ID :** `#{order['id']}`\n"
+        f"🆔 **ORDER ID :** #{order['id']}\n"
         f"👤 **CUSTOMER :** {username_display}\n"
         f"🎮 **GAME :** {order['game_name']}\n"
         f"📦 **PACKAGE :** {order['package_name']}\n"
-        f"🎯 **PLAYER ID:** `{order['player_id']}`\n"
-        f"💵 **TOTAL :** `${order['selling_price']:.2f}`\n"
+        f"🎯 **PLAYER ID:** {order['player_id']}\n"
+        f"💵 **TOTAL :** ${order['selling_price']:.2f}\n"
         "-----------------------------\n"
         f"📌 **STATUS :** {status_display}\n"
-        f"📅 **DATE :** `{formatted_date}`\n"
+        f"📅 **DATE :** {formatted_date}\n"
         "============================-\n"
         "🙏 **អរគុណច្រើនសម្រាប់ការប្រើប្រាស់សេវាកម្មរបស់យើងខ្ញុំ!**\n"
         "✨ *Thank you for choosing our service!*"
@@ -214,4 +214,321 @@ async def choose_package(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["price"] = price
 
     await query.message.reply_text(
-        f"🛒 បានជ្រើសរើស៖
+        f"🛒 បានជ្រើសរើស៖ {package}\n"
+        f"💵 តម្លៃ៖ ${price:.2f}\n\n"
+        "សូមផ្ញើ Player ID / UID / Username របស់អ្នកមកទីនេះ៖"
+    )
+    return WAITING_PLAYER_ID
+
+async def receive_player_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    player_id = update.message.text.strip()
+    context.user_data["player_id"] = player_id
+
+    game_key = context.user_data.get("game_key", "mobile_legends")
+    game_name = PRODUCTS.get(game_key, {}).get("name", "Mobile Legends")
+    package = context.user_data.get("package", "Diamonds")
+    price = context.user_data.get("price", 0.0)
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ បញ្ជាក់ការបញ្ជាទិញ", callback_data="confirm_order")],
+        [InlineKeyboardButton("❌ បោះបង់", callback_data="cancel_order")],
+    ])
+
+    await update.message.reply_text(
+        f"🧾 *សេចក្តីសង្ខេបការបញ្ជាទិញ*\n\n"
+        f"🎮 ហ្គេម៖ {game_name}\n"
+        f"💎 កញ្ចប់៖ {package}\n"
+        f"👤 ID អ្នកលេង៖ `{player_id}`\n"
+        f"💵 តម្លៃសរុប៖ *${price:.2f}*\n\n"
+        "សូមពិនិត្យ និងបញ្ជាក់ការបញ្ជាទិញរបស់អ្នក។",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+    return ConversationHandler.END
+
+async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    price = context.user_data.get("price", 0.0)
+    caption_text = (
+        "📸 ស្កេនបង់ប្រាក់ រួចផ្ញើ Receipt មកទីនេះ\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🏛 KHQR ABA PAYMENT\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"💳 អ្នកត្រូវបង់ប្រាក់: ${price:.2f}\n"
+        f"Player / Username: {context.user_data.get('player_id', 'N/A')}\n"
+        f"💵 ចំនួនទឹកប្រាក់: ${price:.2f}\n"
+        "❗ សូមទំនាក់ទំនង Admin ប្រសិនបើមានបញ្ហា。\n"
+        "❗ សូមចំណាំ៖ ប្រសិនបើចំនួនទឹកប្រាក់មិនត្រឹមត្រូវ ខាងយើងមិនដាក់ជូនទេ!"
+    )
+
+    await query.edit_message_text("💳 កំពុងបង្កើតព័ត៌មានបង់ប្រាក់...")
+
+    # ផ្ញើរូបភាព KHQR ជាមួយ Caption
+    if os.path.exists("khqr.png"):
+        with open("khqr.png", "rb") as photo_file:
+            await query.message.reply_photo(
+                photo=photo_file,
+                caption=caption_text,
+                parse_mode="Markdown"
+            )
+    else:
+        await query.message.reply_text(caption_text, parse_mode="Markdown")
+
+    return WAITING_PAYMENT
+
+async def cancel_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("❌ ការបញ្ជាទិញត្រូវបានបោះបង់。")
+    return ConversationHandler.END
+
+async def receive_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.photo:
+        await update.message.reply_text("📸 សូមផ្ញើរូបថតអេក្រង់ (Receipt) នៃការបង់ប្រាក់。")
+        return WAITING_PAYMENT
+
+    photo = update.message.photo[-1]
+    user = update.effective_user
+
+    game_key = context.user_data.get("game_key", "mobile_legends")
+    game_name = PRODUCTS.get(game_key, {}).get("name", "Mobile Legends")
+    package = context.user_data.get("package", "Diamonds")
+    player_id = context.user_data.get("player_id", "N/A")
+    cost = context.user_data.get("cost", 0.0)
+    price = context.user_data.get("price", 0.0)
+    profit = price - cost
+
+    conn = db()
+    cur = conn.execute("""
+        INSERT INTO orders
+        (telegram_id, username, game_key, game_name, package_name,
+         player_id, cost, selling_price, profit, status,
+         payment_file_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        user.id, user.username or "", game_key, game_name, package,
+        player_id, cost, price, profit, "PAYMENT_REVIEW",
+        photo.file_id, datetime.now().isoformat(timespec="seconds")
+    ))
+    order_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+
+    await update.message.reply_text(
+        f"✅ ទទួលបានវិក្កយបត្របង់ប្រាក់ហើយ!\n\n"
+        f"លេខអូឌើ (Order ID): #{order_id}\n"
+        "⏳ ស្ថានភាព៖ កំពុងរង់ចាំការពិនិត្យផ្ទៀងផ្ទាត់..."
+    )
+
+    safe_username = (user.username or "No username").replace("_", "\\_").replace("*", "\\*")
+    admin_text = (
+        f"🔔 *ការបញ្ជាទិញថ្មី #{order_id}*\n\n"
+        f"🎮 *ហ្គេម:* {game_name}\n"
+        f"💎 *កញ្ចប់:* {package}\n"
+        f"👤 *ID អ្នកលេង:* `{player_id}`\n"
+        f"💵 *ប្រាក់អតិថិជនបង់:* ${price:.2f}\n"
+        f"💰 *ប្រាក់ចំណេញ:* ${profit:.2f}\n"
+        f"👤 *Telegram:* @{safe_username}\n\n"
+        f"📌 *ស្ថានភាព:* ⏳ PENDING REVIEW"
+    )
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ ផ្ទៀងផ្ទាត់ការបង់ប្រាក់", callback_data=f"verify:{order_id}")],
+        [InlineKeyboardButton("❌ បដិសេធការបង់ប្រាក់", callback_data=f"reject:{order_id}")],
+    ])
+
+    try:
+        await context.bot.send_photo(
+            chat_id=GROUP_ID, photo=photo.file_id,
+            caption=safe_caption(admin_text), reply_markup=keyboard, parse_mode="Markdown"
+        )
+    except Exception as e:
+        print(f"❌ Error sending to group: {e}")
+
+    return ConversationHandler.END
+
+async def support_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❓ FAQ / សំណួរញឹកញាប់", callback_data="support_faq")],
+        [InlineKeyboardButton("📩 ផ្ញើសារទៅកាន់ Admin", callback_data="support_contact")],
+        [InlineKeyboardButton("⬅️ ត្រឡប់ក្រោយ", callback_data="back")],
+    ])
+    text = "🎧 *មជ្ឈមណ្ឌលជំនួយ និងគាំទ្រ (Support Center)*\n\nសូមជ្រើសរើសជម្រើសខាងក្រោម៖"
+
+    if query.message.photo:
+        await query.edit_message_caption(caption=safe_caption(text), reply_markup=keyboard, parse_mode="Markdown")
+    else:
+        await query.edit_message_text(text=text, reply_markup=keyboard, parse_mode="Markdown")
+
+async def support_faq(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    faq_text = (
+        "<b>❓ សំណួរដែលសួរញឹកញាប់ (FAQ)</b>\n\n"
+        "🔹 <b>តើ Top Up រយៈពេលប៉ុន្មានទើបចូល?</b>\n"
+        "👉 បន្ទាប់ពីលោកអ្នកបង់ប្រាក់ ៥ ទៅ ១៥ នាទីបន្ទាប់ពីការបញ្ជាក់ជាក់ស្តែង。\n\n"
+        "🔹 <b>តើធ្វើម៉េច Player ID ខុស?</b>\n"
+        "👉 សូមប្រញាប់ចុច <b>«ធ្វើសេវាទៅសេវា Admin»</b> ដើម្បីកែប្រែភ្លាមៗ!\n\n"
+        "🔹 <b>អត់បានទទួលប្រាក់ហើយ តែមិនដំណើរការ?</b>\n"
+        "👉 សូមផ្ញើវិក្កយបត្រ (Receipt) ចូលមកកាន់ Admin តាមរយៈប៊ូតុងខាងក្រោម。"
+    )
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🛠 ធ្វើសេវាទៅសេវា Admin", callback_data="support_contact")],
+        [InlineKeyboardButton("⬅️ ត្រឡប់ក្រោយ", callback_data="support_menu")],
+    ])
+
+    if query.message.photo:
+        await query.edit_message_caption(caption=safe_caption(faq_text), reply_markup=keyboard, parse_mode="HTML")
+    else:
+        await query.edit_message_text(text=faq_text, reply_markup=keyboard, parse_mode="HTML")
+
+async def start_support_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    text = "📝 *ផ្ញើសារសាកសួរទៅកាន់ Admin*\n\nសូមសរសេរសារ ឬបញ្ហារបស់អ្នកមកទីនេះ៖"
+
+    if query.message.photo:
+        await query.edit_message_caption(caption=safe_caption(text), parse_mode="Markdown")
+    else:
+        await query.edit_message_text(text=text, parse_mode="Markdown")
+
+    return WAITING_SUPPORT_MSG
+
+async def receive_support_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    msg = update.message
+    user_text = msg.text or msg.caption or "[Media Only]"
+
+    safe_name = (user.full_name or "Unknown").replace("_", "\\_").replace("*", "\\*")
+    safe_username = (user.username or "No username").replace("_", "\\_").replace("*", "\\*")
+
+    ticket_info = (
+        f"📩 *សារជំនួយថ្មី (Support Ticket)*\n\n"
+        f"👤 *ពី:* {safe_name} (@{safe_username})\n"
+        f"🆔 *User ID:* `{user.id}`\n\n"
+        f"💬 *សារ:* {user_text}\n\n"
+        f"👇 *របៀបឆ្លើយតប:* Reply សារនេះដើម្បីឆ្លើយតបទៅកាន់អតិថិជន。"
+    )
+
+    target_chat = GROUP_2_ID if GROUP_2_ID != 0 else GROUP_ID
+
+    try:
+        if msg.photo:
+            await context.bot.send_photo(chat_id=target_chat, photo=msg.photo[-1].file_id, caption=safe_caption(ticket_info), parse_mode="Markdown")
+        elif msg.document:
+            await context.bot.send_document(chat_id=target_chat, document=msg.document.file_id, caption=safe_caption(ticket_info), parse_mode="Markdown")
+        else:
+            await context.bot.send_message(chat_id=target_chat, text=ticket_info, parse_mode="Markdown")
+
+        await msg.reply_text("✅ សាររបស់អ្នកត្រូវបានផ្ញើទៅកាន់ក្រុមការងារ Admin រួចរាល់ហើយ!")
+    except Exception as e:
+        print(f"Error sending support message: {e}")
+
+    return ConversationHandler.END
+
+async def direct_support_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type == "private" and update.message and not update.message.text.startswith("/"):
+        await receive_support_msg(update, context)
+
+async def admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    
+    is_authorized = user_id in ADMIN_IDS
+    if not is_authorized:
+        for gid in [GROUP_ID, GROUP_2_ID]:
+            if gid == 0: continue
+            try:
+                member = await context.bot.get_chat_member(gid, user_id)
+                if member.status in ["administrator", "creator"]:
+                    is_authorized = True
+                    break
+            except Exception:
+                pass
+
+    if not is_authorized:
+        await query.answer("⚠️ អ្នកគ្មានសិទ្ធិគ្រប់គ្រងអូឌើទេ!", show_alert=True)
+        return
+
+    await query.answer()
+    action, order_id = query.data.split(":")
+    order_id = int(order_id)
+
+    conn = db()
+    order = conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+
+    if not order:
+        await query.edit_message_caption(caption="❌ រកមិនឃើញអូឌើនេះទេ។")
+        conn.close()
+        return
+
+    safe_username = (order["username"] or "No username").replace("_", "\\_").replace("*", "\\*")
+    
+    status_text_map = {
+        "PAYMENT_REVIEW": "⏳ PENDING REVIEW",
+        "PAID_VERIFIED": "✅ PAID & VERIFIED",
+        "TOPUP_PROCESSING": "🚀 TOP-UP PROCESSING",
+        "COMPLETED": "🎉 COMPLETED",
+        "PAYMENT_REJECTED": "❌ REJECTED"
+    }
+
+    base_admin_text = (
+        f"🔔 *ការបញ្ជាទិញ #{order_id}*\n\n"
+        f"🎮 *ហ្គេម:* {order['game_name']}\n"
+        f"💎 *កញ្ចប់:* {order['package_name']}\n"
+        f"👤 *ID អ្នកលេង:* `{order['player_id']}`\n"
+        f"💵 *ប្រាក់អតិថិជនបង់:* ${order['selling_price']:.2f}\n"
+        f"💰 *ប្រាក់ចំណេញ:* ${order['profit']:.2f}\n"
+        f"👤 *Telegram:* @{safe_username}\n\n"
+    )
+
+    if action == "verify":
+        conn.execute("UPDATE orders SET status = 'PAID_VERIFIED' WHERE id = ?", (order_id,))
+        conn.commit()
+        updated_status = status_text_map["PAID_VERIFIED"]
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 ចាប់ផ្តើម TOP-UP", callback_data=f"start:{order_id}")]])
+        
+        full_text = base_admin_text + f"📌 *ស្ថានភាព:* {updated_status}\n*(ការបង់ប្រាក់ត្រូវបានផ្ទៀងផ្ទាត់)*"
+        await query.edit_message_caption(caption=safe_caption(full_text), reply_markup=keyboard, parse_mode="Markdown")
+
+    elif action == "reject":
+        conn.execute("UPDATE orders SET status = 'PAYMENT_REJECTED' WHERE id = ?", (order_id,))
+        conn.commit()
+        await context.bot.send_message(chat_id=order["telegram_id"], text=f"❌ ការបង់ប្រាក់សម្រាប់ Order #{order_id} មិនអាចផ្ទៀងផ្ទាត់បានទេ ទឺកប្រាក់មិនគ្រប់គ្រាន់ទេ។")
+        updated_status = status_text_map["PAYMENT_REJECTED"]
+        
+        full_text = base_admin_text + f"📌 *ស្ថានភាព:* {updated_status}\n*(ការបង់ប្រាក់ត្រូវបានបដិសេធ)*"
+        await query.edit_message_caption(caption=safe_caption(full_text), parse_mode="Markdown")
+
+    elif action == "start":
+        conn.execute("UPDATE orders SET status = 'TOPUP_PROCESSING' WHERE id = ?", (order_id,))
+        conn.commit()
+        updated_status = status_text_map["TOPUP_PROCESSING"]
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("✅ បញ្ចប់ការ TOP-UP", callback_data=f"complete:{order_id}")]])
+        
+        full_text = base_admin_text + f"📌 *ស្ថានភាព:* {updated_status}\n*(កំពុងដំណើរការ Top-up)*"
+        await query.edit_message_caption(caption=safe_caption(full_text), reply_markup=keyboard, parse_mode="Markdown")
+
+    elif action == "complete":
+        conn.execute("UPDATE orders SET status = 'COMPLETED' WHERE id = ?", (order_id,))
+        conn.commit()
+        
+        updated_order = conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+        if updated_order:
+            receipt_text = generate_order_receipt(updated_order)
+            await context.bot.send_message(
+                chat_id=updated_order["telegram_id"],
+                text=receipt_text,
+                parse_mode="Markdown"
+            )
+
+        updated_status = status_text_map["COMPLETED"]
+        full_text = base_admin_text + f"📌 *ស្ថានភាព:* {updated_status}\n*(ការបញ្ជាទិញបានបញ្ចប់រួចរាល់)*"
+        await query.edit_message_caption(
