@@ -268,7 +268,6 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text("💳 កំពុងបង្កើតព័ត៌មានបង់ប្រាក់...")
 
-    # ផ្ញើរូបភាព KHQR ជាមួយ Caption
     if os.path.exists("khqr.png"):
         with open("khqr.png", "rb") as photo_file:
             await query.message.reply_photo(
@@ -436,6 +435,43 @@ async def receive_support_msg(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     return ConversationHandler.END
 
+async def reply_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    if not message.reply_to_message:
+        return
+
+    replied_text = message.reply_to_message.caption or message.reply_to_message.text or ""
+    if "User ID:" not in replied_text:
+        return
+
+    try:
+        for line in replied_text.split("\n"):
+            if "User ID:" in line:
+                user_id_str = line.split("`")[1] if "`" in line else line.split(":")[-1].strip()
+                target_user_id = int(user_id_str)
+                
+                admin_reply_text = message.text or message.caption or ""
+                
+                if message.photo:
+                    await context.bot.send_photo(
+                        chat_id=target_user_id,
+                        photo=message.photo[-1].file_id,
+                        caption=f"💬 *សារឆ្លើយតបពី Admin៖*\n\n{admin_reply_text}",
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=target_user_id,
+                        text=f"💬 *សារឆ្លើយតបពី Admin៖*\n\n{admin_reply_text}",
+                        parse_mode="Markdown"
+                    )
+                
+                await message.reply_text("✅ បានផ្ញើសារឆ្លើយតបទៅកាន់អតិថិជនជោគជ័យ!")
+                break
+    except Exception as e:
+        print(f"❌ Error replying to user: {e}")
+        await message.reply_text(f"❌ មិនអាចផ្ញើសារទៅកាន់អតិថិជនបានទេ: {e}")
+
 async def direct_support_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type == "private" and update.message and not update.message.text.startswith("/"):
         await receive_support_msg(update, context)
@@ -468,7 +504,10 @@ async def admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     order = conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
 
     if not order:
-        await query.edit_message_caption(caption="❌ រកមិនឃើញអូឌើនេះទេ។")
+        await query.edit_message_caption(
+            caption=f"🔔 *ការបញ្ជាទិញ #{order_id}*\n\n📌 *ស្ថានភាព:* 🎉 COMPLETED\n*(ការបញ្ជាទិញបានបញ្ចប់រួចរាល់)*",
+            parse_mode="Markdown"
+        )
         conn.close()
         return
 
@@ -534,7 +573,7 @@ async def admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         updated_status = status_text_map["COMPLETED"]
         full_text = base_admin_text + f"📌 *ស្ថានភាព:* {updated_status}\n*(ការបញ្ជាទិញបានបញ្ចប់រួចរាល់)*"
-        await query.edit_message_caption(caption=safe_caption(full_text), parse_mode="Markdown")
+        await query.edit_message_caption(caption=safe_caption(full_text), reply_markup=keyboard, parse_mode="Markdown")
 
     conn.close()
 
@@ -685,6 +724,10 @@ def main():
     app.add_handler(CallbackQueryHandler(support_faq, pattern="^support_faq$"))
     app.add_handler(CallbackQueryHandler(admin_action, pattern=r"^(verify|reject|start|complete):"))
     app.add_handler(CallbackQueryHandler(back, pattern="^back$"))
+    
+    # Handler សម្រាប់ឱ្យ Admin Reply សារ Support ទៅអតិថិជន
+    app.add_handler(MessageHandler(filters.Chat([GROUP_ID, GROUP_2_ID]) & filters.REPLY & ~filters.COMMAND, reply_to_user))
+    
     app.add_handler(MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, direct_support_handler))
 
     print("Shop Bot is running...")
