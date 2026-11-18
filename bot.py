@@ -264,14 +264,18 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     await query.edit_message_text("💳 កំពុងបង្កើតព័ត៌មានបង់ប្រាក់...")
+import os
 
-    if os.path.exists(KHQR_IMAGE):
-        with open(KHQR_IMAGE, "rb") as photo_file:
-            await query.message.reply_photo(photo=photo_file, caption=safe_caption(caption_text))
-    else:
-        await query.message.reply_text(caption_text)
-
-    return WAITING_PAYMENT
+# ផ្ញើរូបភាព KHQR ជាមួយ Caption
+if os.path.exists("khqr.png"):
+    with open("khqr.png", "rb") as photo_file:
+        await query.message.reply_photo(
+            photo=photo_file, 
+            caption=safe_caption(caption_text),
+            parse_mode="Markdown"
+        )
+else:
+    await query.message.reply_text(caption_text, parse_mode="Markdown")    return WAITING_PAYMENT
 
 async def cancel_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
