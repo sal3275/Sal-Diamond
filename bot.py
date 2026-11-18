@@ -687,12 +687,11 @@ def main():
     app.run_polling()
 
 
-from keep_alive import keep_alive  # ត្រូវធានាថាបានImport keep_alive មកជាមួយ
+from keep_alive import keep_alive
 
 if __name__ == "__main__":
-    # បើកដំណើរការ Flask Server មុន ដើម្បីឱ្យ Render ស្គាល់ Port (Render Port Binding)
+    # បើកដំណើរការ Flask Server ក្នុង Thread ដាច់ដោយឡែក ដើម្បីឱ្យ Render ស្គាល់ Port
     keep_alive()
     
-    # បន្ទាប់មកទើបហៅដំណើរការ Bot របស់អ្នក
+    # បន្ទាប់មកចាប់ផ្តើមដំណើរការ Bot
     main()
-```[cite: 15]
